@@ -94,11 +94,6 @@ next_booking_id(ID) :-
     assertz(booking_counter(N1)),
     atom_concat('B', N1, ID).
 
-%available_seat(Bus, Seat) :-
- %   seat(Bus, Seat, _, _),
-  %  \+ reserved(_, Bus, Seat, _),
-   % \+ blocked_seat(Bus, Seat, _).
-
 available_seat(Bus, Seat) :-
     seat(Bus, Seat, _, _),
     (
