@@ -1,8 +1,6 @@
-% ============================================================
-%  knowledge.pl  -  BusReserve Expert System
-%  Load: swipl knowledge.pl
-%  Run:  start.
-% ============================================================
+% BusReserve - A Bus seat reservation system
+
+%Dynamic Facts
 
 :- dynamic reserved/4.
 :- dynamic blacklisted/1.
@@ -14,16 +12,16 @@
 :- dynamic preference/2.
 :- dynamic passenger_name/2.
 
+%  STATIC FACTS
+
 booking_counter(100).
 passenger_counter(4).
 
-% ============================================================
-%  STATIC FACTS
-% ============================================================
-
+%bus(BusID, StartingPoint, Destination, Type).
 bus(bus101, colombo, kandy,  luxury).
 bus(bus102, colombo, galle,  semi_luxury).
 
+%seat(Bus, SeatID, Position, SeatType).
 seat(bus101, s1, front,  window).
 seat(bus101, s2, front,  aisle).
 seat(bus101, s3, middle, window).
@@ -36,7 +34,7 @@ seat(bus102, s3, middle, window).
 seat(bus102, s4, middle, aisle).
 seat(bus102, s5, back,   window).
 
-% Seed passengers (dynamic so UI can add more)
+% Seed passengers 
 :- assertz(passenger_name(p001, 'Nimal Silva')).
 :- assertz(passenger_type(p001, elderly)).
 :- assertz(preference(p001, window)).
@@ -53,15 +51,15 @@ seat(bus102, s5, back,   window).
 :- assertz(passenger_type(p004, normal)).
 :- assertz(preference(p004, aisle)).
 
+%Seats s1, s2 are nearby
 near(s1, s2).
 near(s2, s3).
 near(s3, s4).
 near(s4, s5).
 
-% ============================================================
 %  PASSENGER REGISTRATION
-% ============================================================
 
+% ID Generation
 next_passenger_id(ID) :-
     retract(passenger_counter(N)),
     N1 is N + 1,
@@ -73,6 +71,7 @@ next_passenger_id(ID) :-
     ;  atom_concat('p',   N1, ID)
     ).
 
+% Type Identification
 age_to_type(Age, elderly) :- Age >= 60, !.
 age_to_type(Age, child)   :- Age =< 12, !.
 age_to_type(Age, student)  :- Age > 12, Age < 26, !.
@@ -87,9 +86,7 @@ register_passenger(Name, Age, Pref, ID) :-
     format('  Registered ~w as ~w (type: ~w, pref: ~w)~n',
            [Name, ID, Type, Pref]).
 
-% ============================================================
 %  BOOKING RULES
-% ============================================================
 
 next_booking_id(ID) :-
     retract(booking_counter(N)),
@@ -97,24 +94,43 @@ next_booking_id(ID) :-
     assertz(booking_counter(N1)),
     atom_concat('B', N1, ID).
 
+%available_seat(Bus, Seat) :-
+ %   seat(Bus, Seat, _, _),
+  %  \+ reserved(_, Bus, Seat, _),
+   % \+ blocked_seat(Bus, Seat, _).
+
 available_seat(Bus, Seat) :-
     seat(Bus, Seat, _, _),
-    \+ reserved(_, Bus, Seat, _),
-    \+ blocked_seat(Bus, Seat, _).
+    (
+        reserved(_, Bus, Seat, _),
+        !, fail
+    ;
+        true
+    ),
+    (
+        blocked_seat(Bus, Seat, _),
+        !, fail
+    ;
+        true
+    ).
 
+% can_book(BusID, SeatNo, PassengerID)
 can_book(_, _, Passenger) :-
-    blacklisted(Passenger), !,
+    blacklisted(Passenger),
+    !,
     format('  [DENIED] ~w is blacklisted.~n', [Passenger]),
     fail.
-can_book(Bus, Seat, _) :-
-    \+ available_seat(Bus, Seat), !,
-    format('  [DENIED] Seat ~w on ~w is not available.~n', [Seat, Bus]),
-    fail.
-can_book(_, _, _).
 
-% ============================================================
+can_book(Bus, Seat, _) :-
+    available_seat(Bus, Seat),
+    !.
+
+can_book(Bus, Seat, _) :-
+    format('  [DENIED] Seat ~w on ~w is not available.~n',
+           [Seat, Bus]),
+    fail.
+
 %  SEAT RECOMMENDATION
-% ============================================================
 
 suitable_seat(Passenger, Bus, Seat) :-
     passenger_type(Passenger, elderly),
@@ -146,9 +162,7 @@ recommend_seat(Passenger, Bus, Seat) :-
 recommend_seat(_, Bus, Seat) :-
     available_seat(Bus, Seat), !.
 
-% ============================================================
 %  BOOKING ACTIONS
-% ============================================================
 
 book_seat(Bus, Seat, Passenger) :-
     ( can_book(Bus, Seat, Passenger)
@@ -185,11 +199,12 @@ unblock_seat(Bus, Seat) :-
     ).
 
 handle_full_bus(Bus, Passenger) :-
-    ( \+ available_seat(Bus, _)
-    -> assertz(waiting_list(Bus, Passenger)),
-       format('  ~w added to waiting list for ~w.~n', [Passenger, Bus])
-    ;  format('  ~w still has seats available.~n', [Bus])
-    ).
+    available_seat(Bus, _), !,
+    format('  ~w still has seats available.~n', [Bus]).
+
+handle_full_bus(Bus, Passenger) :-
+    assertz(waiting_list(Bus, Passenger)),
+    format('  ~w added to waiting list for ~w.~n', [Passenger, Bus]).
 
 add_to_blacklist(Passenger) :-
     ( blacklisted(Passenger)
@@ -198,19 +213,17 @@ add_to_blacklist(Passenger) :-
        format('  ~w blacklisted.~n', [Passenger])
     ).
 
-% ============================================================
 %  REPORTS
-% ============================================================
 
 show_all_bookings :-
     nl, write('  --- All Bookings ---'), nl,
-    ( \+ reserved(_, _, _, _)
-    -> write('  No bookings yet.'), nl
-    ;  reserved(ID, Bus, Seat, Passenger),
-       format('  ~w | ~w | Seat ~w | ~w~n', [ID, Bus, Seat, Passenger]),
-       fail
-    ;  true
-    ).
+    reserved(_, _, _, _), !,
+    reserved(ID, Bus, Seat, Passenger),
+    format('  ~w | ~w | Seat ~w | ~w~n', [ID, Bus, Seat, Passenger]),
+    fail.
+
+show_all_bookings :-
+    write('  No bookings yet.'), nl.
 
 show_available_seats(Bus) :-
     findall(Seat, available_seat(Bus, Seat), List),
@@ -227,9 +240,7 @@ show_waiting_list(Bus) :-
     ;  format('  Waiting list for ~w: ~w~n', [Bus, List])
     ).
 
-% ============================================================
 %  INPUT HELPERS (CLI mode)
-% ============================================================
 
 read_input(Prompt, Atom) :-
     write(Prompt),
@@ -242,9 +253,7 @@ read_int(Prompt, N) :-
     read_line_to_string(user_input, Str),
     ( number_string(N, Str) -> ! ; write('  Enter a number.'), nl, fail ).
 
-% ============================================================
 %  CLI MENU (fallback if not using GUI)
-% ============================================================
 
 start :-
     nl,
